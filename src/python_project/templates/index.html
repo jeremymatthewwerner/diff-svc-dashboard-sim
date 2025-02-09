@@ -52,11 +52,11 @@
         .stage-cell {
             min-width: 100px;
             text-align: center;
+            background-color: white;
         }
 
         #header-CLOSED {
             font-weight: bold;
-            background-color: #f8f9fa;
         }
         
         .within-slo {
@@ -258,15 +258,25 @@
                             activeTimers[`${caseData.id}-${stage}`] = setInterval(() => updateTimer(caseData.id, stage), 1000);
                             cell.textContent = formatTime(stageData.time, stageData.slo_time, false);
                             cell.classList.add(stageData.within_slo ? 'active-within-slo' : 'active-exceeded-slo');
+                        } else if (isClosed) {
+                            // Show checkmark only when CLOSED stage is active
+                            cell.textContent = '\u2713';
                         } else {
-                            cell.textContent = formatTime(null, null, true);
+                            cell.textContent = formatTime(stageData.time, stageData.slo_time, false);
                         }
                     } else {
                         if (!isClosed) {
-                            cell.classList.add(stageData.within_slo ? 'within-slo' : 'exceeded-slo');
-                            cell.textContent = formatTime(stageData.time, stageData.slo_time, false);
+                            if (stageData.time !== null) {
+                                cell.classList.add(stageData.within_slo ? 'within-slo' : 'exceeded-slo');
+                                cell.textContent = formatTime(stageData.time, stageData.slo_time, false);
+                            } else {
+                                cell.textContent = '\u2014';
+                            }
+                        } else if (stageData.time !== null) {
+                            // Show checkmark for completed cases
+                            cell.textContent = '\u2713';
                         } else {
-                            cell.textContent = formatTime(null, null, true);
+                            cell.textContent = '\u2014';
                         }
                     }
                 } else {
@@ -278,12 +288,15 @@
         
         function updateStats(stats) {
             for (const [stage, data] of Object.entries(stats)) {
+                if (stage === 'CLOSED') continue; // Skip CLOSED column
                 const header = document.getElementById(`header-${stage}`);
                 if (header) {
                     const withinSlo = header.querySelector('.within-slo-stat');
                     const exceededSlo = header.querySelector('.exceeded-slo-stat');
-                    withinSlo.textContent = `${Math.round(data.within_slo)}%`;
-                    exceededSlo.textContent = `${Math.round(data.exceeded_slo)}%`;
+                    if (withinSlo && exceededSlo) {
+                        withinSlo.textContent = `${Math.round(data.within_slo)}%`;
+                        exceededSlo.textContent = `${Math.round(data.exceeded_slo)}%`;
+                    }
                 }
             }
         }
@@ -292,9 +305,16 @@
             fetch('/api/state')
                 .then(response => response.json())
                 .then(data => {
+                    console.log('Received state:', data);
                     document.getElementById('total-cases').textContent = data.total_cases;
                     updateStats(data.stage_stats);
-                    data.cases.forEach(updateCase);
+                    data.cases.forEach(caseData => {
+                        console.log('Updating case:', caseData);
+                        updateCase(caseData);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error updating state:', error);
                 });
         }
         
