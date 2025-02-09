@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Service Simulation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .stats-box {
+            text-align: center;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        
+        .case-chip {
+            display: inline-block;
+            padding: 4px 12px;
+            margin: 0 4px;
+            border-radius: 16px;
+            font-size: 0.9em;
+        }
+        
+        .time-chip {
+            background-color: #e3f2fd;
+            border: 1px solid #90caf9;
+        }
+        
+        .priority-chip {
+            background-color: #fce4ec;
+            border: 1px solid #f48fb1;
+        }
+        
+        .stage-cell {
+            min-width: 100px;
+            text-align: center;
+        }
+        
+        .within-slo {
+            background-color: #2e7d32 !important;
+            color: white !important;
+            transition: background-color 0.3s ease;
+        }
+        
+        .exceeded-slo {
+            background-color: #c62828 !important;
+            color: white !important;
+            transition: background-color 0.3s ease;
+        }
+
+        .active-within-slo {
+            background-color: #c8e6c9 !important;
+            transition: background-color 0.3s ease;
+        }
+        
+        .active-exceeded-slo {
+            background-color: #ffcdd2 !important;
+            transition: background-color 0.3s ease;
+        }
+        
+        .active-stage {
+            background-color: #fff3e0;
+            font-weight: bold;
+        }
+        
+        .slo-stats {
+            font-size: 0.8em;
+            margin-bottom: 4px;
+        }
+        
+        .within-slo-stat {
+            color: #2e7d32;
+        }
+        
+        .exceeded-slo-stat {
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="stats-box">
+            <div class="mb-3">
+                <label for="sloRate" class="form-label">SLO Failure Rate (%)</label>
+                <input type="number" class="form-control" id="sloRate" value="20" min="0" max="100" style="width: 100px; margin: 0 auto;">
+            </div>
+            <h3>Cases Created</h3>
+            <h2 id="total-cases">0</h2>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Case Info</th>
+                        <th class="stage-cell" id="header-WAITING">
+                            <div class="slo-stats">
+                                <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            WAITING
+                        </th>
+                        <th class="stage-cell" id="header-DEFINING">
+                            <div class="slo-stats">
+                                In SLO: <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            DEFINING
+                        </th>
+                        <th class="stage-cell" id="header-SOLVING">
+                            <div class="slo-stats">
+                                In SLO: <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            SOLVING
+                        </th>
+                        <th class="stage-cell" id="header-TRANSFERRING">
+                            <div class="slo-stats">
+                                In SLO: <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            TRANSFERRING
+                        </th>
+                        <th class="stage-cell" id="header-RESOLVING">
+                            <div class="slo-stats">
+                                In SLO: <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            RESOLVING
+                        </th>
+                        <th class="stage-cell" id="header-FOLLOWING-UP">
+                            <div class="slo-stats">
+                                In SLO: <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            FOLLOWING-UP
+                        </th>
+                        <th class="stage-cell" id="header-CLOSED">
+                            <div class="slo-stats">
+                                In SLO: <span class="within-slo-stat">0%</span> | <span class="exceeded-slo-stat">0%</span>
+                            </div>
+                            CLOSED
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="cases-table">
+                    <!-- Cases will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let activeTimers = {};
+        
+        function formatTime(seconds, sloTime) {
+            if (seconds === undefined || seconds === null || isNaN(seconds)) return '—';
+            if (sloTime === undefined) return Math.round(seconds);
+            return `${Math.round(seconds)} / ${Math.round(sloTime)}`;
+        }
+        
+        function updateTimer(caseId, stage) {
+            const cellId = `${caseId}-${stage}`;
+            const cell = document.getElementById(cellId);
+            if (cell) {
+                const startTime = parseFloat(cell.dataset.startTime);
+                const sloTime = parseFloat(cell.dataset.sloTime);
+                const currentTime = (Date.now() / 1000) - startTime;
+                cell.textContent = formatTime(currentTime, sloTime);
+                
+                // Update active cell color based on SLO status
+                cell.classList.remove('active-within-slo', 'active-exceeded-slo');
+                cell.classList.add(currentTime <= sloTime ? 'active-within-slo' : 'active-exceeded-slo');
+            }
+        }
+        
+        function updateCase(caseData) {
+            let row = document.getElementById(caseData.id);
+            if (!row) {
+                row = document.createElement('tr');
+                row.id = caseData.id;
+                document.getElementById('cases-table').insertBefore(row, document.getElementById('cases-table').firstChild);
+            }
+            
+            // Clear existing content
+            row.innerHTML = '';
+            
+            // Add case info
+            const creationTime = new Date(caseData.creation_time);
+            const infoCell = document.createElement('td');
+            infoCell.innerHTML = `
+                <span class="case-chip time-chip">${creationTime.toLocaleTimeString()}</span>
+                <span class="case-chip priority-chip">P${caseData.priority}</span>
+            `;
+            row.appendChild(infoCell);
+            
+            // Add stage cells
+            const stages = ['WAITING', 'DEFINING', 'SOLVING', 'TRANSFERRING', 'RESOLVING', 'FOLLOWING-UP', 'CLOSED'];
+            stages.forEach(stage => {
+                const cell = document.createElement('td');
+                cell.id = `${caseData.id}-${stage}`;
+                cell.classList.add('stage-cell');
+                
+                // Clear any existing timer for this cell
+                if (activeTimers[`${caseData.id}-${stage}`]) {
+                    clearInterval(activeTimers[`${caseData.id}-${stage}`]);
+                    delete activeTimers[`${caseData.id}-${stage}`];
+                }
+                
+                const stageData = caseData.stages[stage];
+                if (stageData) {
+                    if (stageData.active) {
+                        cell.classList.add('active-stage');
+                        cell.dataset.startTime = (Date.now() / 1000) - stageData.time;
+                        cell.dataset.sloTime = stageData.slo_time;
+                        activeTimers[`${caseData.id}-${stage}`] = setInterval(() => updateTimer(caseData.id, stage), 1000);
+                        cell.textContent = formatTime(stageData.time, stageData.slo_time);
+                        cell.classList.add(stageData.within_slo ? 'active-within-slo' : 'active-exceeded-slo');
+                    } else {
+                        cell.classList.add(stageData.within_slo ? 'within-slo' : 'exceeded-slo');
+                        cell.textContent = formatTime(stageData.time, stageData.slo_time);
+                    }
+                } else {
+                    cell.textContent = '—';
+                }
+                row.appendChild(cell);
+            });
+        }
+        
+        function updateStats(stats) {
+            for (const [stage, data] of Object.entries(stats)) {
+                const header = document.getElementById(`header-${stage}`);
+                if (header) {
+                    const withinSlo = header.querySelector('.within-slo-stat');
+                    const exceededSlo = header.querySelector('.exceeded-slo-stat');
+                    withinSlo.textContent = `${Math.round(data.within_slo)}%`;
+                    exceededSlo.textContent = `${Math.round(data.exceeded_slo)}%`;
+                }
+            }
+        }
+        
+        function updateState() {
+            fetch('/api/state')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('total-cases').textContent = data.total_cases;
+                    updateStats(data.stage_stats);
+                    data.cases.forEach(updateCase);
+                });
+        }
+        
+        // Handle SLO rate changes
+        document.getElementById('sloRate').addEventListener('change', function() {
+            const rate = parseFloat(this.value);
+            if (rate >= 0 && rate <= 100) {
+                fetch('/api/set_slo_rate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ rate: rate })
+                });
+            }
+        });
+
+        // Start simulation and update loop
+        fetch('/api/start', { method: 'POST' })
+            .then(() => {
+                setInterval(updateState, 1000);
+            });
+    </script>
+</body>
+</html>
