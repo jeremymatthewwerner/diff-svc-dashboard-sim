@@ -107,6 +107,12 @@ Each case in the table will include:
 
 #### General UI Requirements
 - Clean, modern web interface
+- Fixed position header elements:
+  - Statistics display area remains at top of page
+  - Table header row stays visible while scrolling
+- SLO failure rate input:
+  - No scroll bars on number input
+  - Clean, minimal appearance
 - Responsive design for various screen sizes
 - Easy-to-read table format
 - Clear status indicators

@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request
 from datetime import datetime
 import os
-from simulation import CustomerServiceSimulation
+from python_project.simulation import CustomerServiceSimulation
 
 app = Flask(__name__)
 
